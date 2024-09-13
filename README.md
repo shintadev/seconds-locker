@@ -35,7 +35,7 @@ Seconds-Locker is designed to enhance security and accessibility by allowing use
 
 - **PCF8574 (I2C Expander)**:
   - Address `0x20`: ➞ Keypad input.
-  - Address `0x21`: ➞ Magnetic door sensor (MC-38).
+  - Address `0x21`: ➞ Magnetic door sensor (MC-31).
   - Address `0x22`: ➞ IR object detection sensor.
 
 - **MFRC-522 (RFID Reader)**:
