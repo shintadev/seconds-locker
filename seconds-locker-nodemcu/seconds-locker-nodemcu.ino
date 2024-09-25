@@ -1,20 +1,17 @@
 #include <ArduinoJson.h>
-#include <Adafruit_SSD1306.h>
 #include <Adafruit_PWMServoDriver.h>
 #include <EEPROM.h>
 #include <ESP8266Ping.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
-#include <I2CKeyPad.h>
-#include <memorysaver.h>
 #include <MFRC522.h>
 #include <SPI.h>
 #include <WebSocketsClient.h>
 #include <Wire.h>
 
 // Locker setup
-const String LOCKER_ID = "********"; 
-const int LOCKERS_NUM = xxx; // Adjust as locker doors number
+const String LOCKER_ID = "********";
+const int LOCKERS_NUM = 4;
 String token = "";
 unsigned long lastHeartbeat = 0;
 unsigned long lastWiFiAttempt = 0;
@@ -28,8 +25,6 @@ unsigned long lastWebSocketAttempt = 0;
 // WiFi credentials & setup
 const char* ssid = "********";
 const char* password = "********";
-char* backup_ssid = "********";
-char* backup_password = "********";
 ESP8266WiFiMulti WiFiMulti;
 
 // WebSocket setup
@@ -48,19 +43,6 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define PCF8574_ADDRESS_1 0x21
 #define PCF8574_ADDRESS_2 0x22
 
-// OLED setup
-#define SCREEN_WIDTH 128  // OLED display width, in pixels
-#define SCREEN_HEIGHT 64  // OLED display height, in pixels
-#define OLED_RESET -1
-#define OLED_ADDRESS 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-// Keypad setup
-#define KEYPAD_ADDRESS 0x20
-I2CKeyPad keyPad(KEYPAD_ADDRESS);
-
-char keymap[19] = "123A456B789C*0#DNF";  // ... NoKey  Fail }
-
 // MFRC522 setup
 constexpr uint8_t RST_PIN = D3;
 constexpr uint8_t SS_PIN = D4;
@@ -68,8 +50,12 @@ constexpr uint8_t SS_PIN = D4;
 MFRC522 rfid(SS_PIN, RST_PIN);  // Instance of the class
 MFRC522::MIFARE_Key key;
 
+// Buzzer setup
+constexpr uint8_t BUZZ_PIN = D8;
+
 // Other variables
 int failCount = 0;
+
 
 enum ConnectionState {
   DISCONNECTED,
@@ -85,7 +71,7 @@ ConnectionState connectionState = DISCONNECTED;
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_DISCONNECTED:
-      Serial.printf("[WSc] Disconnected!\n");
+      Serial.println("[WSc] Disconnected!\n");
       connectionState = DISCONNECTED;
       break;
     case WStype_CONNECTED:
@@ -93,11 +79,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
         Serial.printf("[WSc] Connected to url: %s\n", payload);
         connectionState = CONNECTED;
         webSocket.sendTXT("Hello from locker" + LOCKER_ID);
-        if (token.length() > 0) {
-          authenticate();
-        } else {
-          registerLocker();
-        }
       }
       break;
     case WStype_TEXT:
@@ -124,11 +105,9 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.setDebugOutput(true);
+  // Serial.setDebugOutput(true);
 
-  Serial.println();
-  Serial.println();
-  Serial.println("Starting...");
+  Serial.println("\nStarting...");
 
   // Uncomment the following line to clear the EEPROM (run once, then comment it out again)
   // clearEEPROM();
@@ -155,14 +134,11 @@ void setup() {
   Wire.write(0xFF);  // Set all pins to high (inputs)
   Wire.endTransmission();
 
-  // Initialize OLED display
-  setupOLED();
-
   // Initialize MFRC522
   rfid.PCD_Init();
 
-  // Initialize keypad
-  setupKeypad();
+  // Initialize buzzer
+  pinMode(BUZZ_PIN, OUTPUT);
 
   // Initialize WiFi
   WiFiMulti.addAP(ssid, password);
@@ -173,6 +149,7 @@ void setup() {
   webSocket.setReconnectInterval(5000);
 
   connectionState = CONNECTING_WIFI;
+  Serial.println("Setup finished");
 }
 
 void loop() {
@@ -185,7 +162,6 @@ void loop() {
         lastWiFiAttempt = currentMillis;
         if (WiFiMulti.run() == WL_CONNECTED) {
           Serial.println("WiFi connected");
-          Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
           connectionState = CONNECTING_WEBSOCKET;
         } else {
           Serial.println("WiFi not connected");
@@ -196,7 +172,7 @@ void loop() {
     case CONNECTING_WEBSOCKET:
       if (currentMillis - lastWebSocketAttempt > 5000) {
         lastWebSocketAttempt = currentMillis;
-        Serial.printf("Attempting to connect to WebSocket server: %s:%d%s\n", websocket_server, websocket_port, websocket_url);
+        // Serial.printf("Attempting to connect to WebSocket server: %s:%d%s\n", websocket_server, websocket_port, websocket_url);
         pingServer();
         webSocket.begin(websocket_server, websocket_port, websocket_url);
       }
@@ -222,17 +198,18 @@ void loop() {
       break;
 
     case AUTHENTICATED:
+      // Send heartbeat to server once each 10 seconds
       if (currentMillis - lastHeartbeat > 10000) {
         lastHeartbeat = currentMillis;
         sendHeartbeat();
       }
 
-      // Your main locker logic here
+      // Main locker logic here
       handleLockerOperations();
       break;
   }
-  webSocket.loop();
-  yield();
+  webSocket.loop();  // Process WebSocket events
+  yield();           // Allow other background tasks to run
 }
 
 void pingServer() {
@@ -257,13 +234,13 @@ void pingServer() {
 void registerLocker() {
   if (connectionState != CONNECTED) return;
 
-  DynamicJsonDocument doc(256);
+  JsonDocument doc;
   doc["event"] = "register";
   doc["data"]["lockerId"] = LOCKER_ID;
   JsonArray lockerDoors = doc["data"]["lockerDoors"].to<JsonArray>();
 
   for (int i = 1; i <= LOCKERS_NUM; i++) {
-    JsonObject door = lockerDoors.createNestedObject();
+    JsonObject door = lockerDoors.add<JsonObject>();
     door["id"] = LOCKER_ID + "-" + String(i);
   }
 
@@ -272,7 +249,7 @@ void registerLocker() {
 
   Serial.println("Sending register: " + output);
   webSocket.sendTXT(output);
-  connectionState = AUTHENTICATING;
+  connectionState = CONNECTED;
 }
 
 void authenticate() {
@@ -285,7 +262,7 @@ void authenticate() {
     return;
   }
 
-  DynamicJsonDocument doc(256);
+  JsonDocument doc;
   doc["event"] = "authenticate";
   doc["data"]["token"] = token;
   doc["data"]["lockerId"] = LOCKER_ID;
@@ -301,7 +278,7 @@ void authenticate() {
 void sendHeartbeat() {
   if (connectionState != AUTHENTICATED) return;
 
-  DynamicJsonDocument doc(128);
+  JsonDocument doc;
   doc["event"] = "heartbeat";
   doc["data"]["lockerId"] = LOCKER_ID;
   doc["data"]["timestamp"] = millis();
@@ -315,12 +292,12 @@ void sendHeartbeat() {
 
 void handleMessage(uint8_t* payload, size_t length) {
   String message = String((char*)payload);
-  DynamicJsonDocument doc(1024);
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, message);
 
   if (error) {
     Serial.print(F("deserializeJson() failed: "));
-    Serial.println(error.f_str());
+    Serial.println(error.c_str());
     return;
   }
 
@@ -341,7 +318,7 @@ void handleMessage(uint8_t* payload, size_t length) {
   }
 }
 
-void handleRegisterResult(const DynamicJsonDocument& doc) {
+void handleRegisterResult(const JsonDocument& doc) {
   bool success = doc["data"]["success"];
   if (success) {
     token = doc["data"]["token"].as<String>();
@@ -360,7 +337,7 @@ void handleRegisterResult(const DynamicJsonDocument& doc) {
   }
 }
 
-void handleAuthResult(const DynamicJsonDocument& doc) {
+void handleAuthResult(const JsonDocument& doc) {
   bool success = doc["data"]["success"];
   if (success) {
     String newToken = doc["data"]["token"].as<String>();
@@ -382,33 +359,27 @@ void handleAuthResult(const DynamicJsonDocument& doc) {
   }
 }
 
-void handleVerifyCodeResult(const DynamicJsonDocument& doc) {
+void handleVerifyCodeResult(const JsonDocument& doc) {
   bool success = doc["data"]["success"];
   if (success) {
     Serial.println("Code verified successfully");
-    displayMessage("Verification succeeded!\nBox ");
-    display.print(doc["data"]["lockerDoorId"].as<int>());
-    display.println(" unlocked.");
-    display.display();
-    Serial.print("\nVerification succeeded!\nBox ");
-    Serial.print(doc["data"]["lockerDoorId"].as<int>());
+    Serial.print("Box ");
+    Serial.print(doc["data"]["lockerDoorId"].as<String>());
     Serial.println(" unlocked.");
     openDoor(doc["data"]["lockerDoorId"].as<String>());
   } else {
-    Serial.println("Code verification failed");
-    displayMessage("Wrong otp!");
-    Serial.println("\nWrong otp!");
+    Serial.println("Code verification failed. Wrong otp!");
     failCount++;
   }
 }
 
-void handleCommand(const DynamicJsonDocument& doc) {
+void handleCommand(const JsonDocument& doc) {
   String command = doc["data"]["command"];
-  String doorId = doc["data"]["lockerId"];
+  String doorId = doc["data"]["doorId"];
   if (command == "open") {
     openDoor(doorId);
     // After opening the door, send a success message
-    DynamicJsonDocument doc(256);
+    JsonDocument doc;
     doc["event"] = "openCommandSuccess";
     doc["data"]["lockerId"] = LOCKER_ID;
     doc["data"]["success"] = true;
@@ -422,47 +393,78 @@ void handleCommand(const DynamicJsonDocument& doc) {
 }
 
 void openDoor(const String& doorId) {
-  int doorIndex = (doorId.substring(doorId.indexOf("-") + 1)).toInt() - 1;
-  Serial.println("Opening door: " + doorId);
+  Serial.println(doorId);
+  int doorIndex = (doorId.substring(doorId.indexOf("-") + 1).toInt() - 1);
+  if (!doorId) {
+    Serial.println("Something wrong here at openDoor");
+    return;
+  }
+  Serial.printf("Unlocking door: %d\n", doorIndex);
   unlockBox(pwm, doorIndex);
   failCount = 0;
+  delay(1000);
+  Serial.printf("Unlocked door: %d\n", doorIndex);
 
   // Limit the time to open the door in 30 seconds
   uint32_t start = millis();
-  bool doorClosed = false;
-  while (millis() - start < 30000 && !doorClosed) {
-    if (checkDoorState(doorId.toInt(), PCF8574_ADDRESS_1, doorIndex) == 0) {
-      doorClosed = true;
+  bool doorClosed = true;
+
+  // Wait for the door to be opened
+  while (millis() - start < 30000) {
+    int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+    if (doorState == 0) {  // Assuming 0 means door is open
+      doorClosed = false;
+      Serial.println("Door opened.");
+      Serial.println(doorId);
       break;
     }
-    yield();
+    yield();  // Allow other background tasks to run
   }
 
+  delay(500);
+
+  // If the door was opened, wait for it to be closed
   if (!doorClosed) {
-    displayMessage("Door is still open!");
-    Serial.println("Door is still open!");
-    while (checkDoorState(doorId.toInt(), PCF8574_ADDRESS_1, doorIndex) == 1) {
-      ringWarning(PCF8574_ADDRESS_1, 4);
-      delay(1000);
-      yield();
+    start = millis();  // Reset timer for door close wait time
+    while (millis() - start < 10000 && !doorClosed) {
+      int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+      if (doorState == 1) {  // Assuming 1 means door is closed
+        doorClosed = true;
+        Serial.println("Door closed.");
+        Serial.println(doorId);
+        break;
+      }
+      yield();  // Allow other background tasks to run
     }
   }
 
-  lockBox(pwm, doorIndex);
+  // If the door did not close in the given time, issue a warning
+  if (!doorClosed) {
+    Serial.println("Door is still open! Issuing warning.");
+    while (checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex) == 0) {  // Assuming 0 means door is open
+      ringWarning();
+      delay(1000);
+      yield();  // Allow other background tasks to run
+    }
+  }
 
-  bool isObjectPresent = checkObject(doorId.toInt(), PCF8574_ADDRESS_2, doorIndex, doorIndex) == 1;
+  delay(500);
+
+  lockBox(pwm, doorIndex);
+  Serial.println(doorId);
+
+  bool isObjectPresent = checkObject(doorIndex + 1, PCF8574_ADDRESS_2, doorIndex, doorIndex) == 1;
   Serial.println(isObjectPresent ? "Package detected in the box!" : "No package detected in the box!");
   sendBoxUsage(doorId, isObjectPresent);
 }
 
 void sendBoxUsage(const String& doorId, bool isObject) {
   if (connectionState != AUTHENTICATED) {
-    displayMessage("ERROR\nPlease reboot or contact\nadmin for help");
     Serial.println("Locker not authenticated");
     return;
   }
 
-  DynamicJsonDocument doc(256);
+  JsonDocument doc;
   doc["event"] = "boxUsage";
   doc["data"]["lockerId"] = LOCKER_ID;
   doc["data"]["doorId"] = doorId;
@@ -475,67 +477,153 @@ void sendBoxUsage(const String& doorId, bool isObject) {
   webSocket.sendTXT(output);
 }
 
-void ringWarning(int pcf8574Addr, int pcfPin) {
-  if (Wire.requestFrom(pcf8574Addr, 1) && Wire.available()) {
+void ringWarning() {
 #ifdef DEBUG
-    Serial.println("Ringing the buzzer");
+  Serial.println("Ringing the buzzer");
 #endif
-    for (int i = 0; i < 3; i++) {
-      Wire.write(1 << pcfPin);
-      delay(500);
-      Wire.write(0);
-      delay(500);
-    }
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(BUZZ_PIN, HIGH);
+    delay(300);
+    digitalWrite(BUZZ_PIN, LOW);
+    delay(300);
   }
 }
 
+// void ringWarning(int pcf8574Addr, int pcfPin) {
+//   if (Wire.requestFrom(pcf8574Addr, 1) && Wire.available()) {
+// #ifdef DEBUG
+//     Serial.println("Ringing the buzzer");
+// #endif
+//     for (int i = 0; i < 3; i++) {
+//       Wire.write(1 << pcfPin);
+//       delay(500);
+//       Wire.write(0);
+//       delay(500);
+//     }
+//   }
+// }
+
 void handleLockerOperations() {
-  // Waiting for any key pressed to wake
-  displayMessage("Press any key to \nstart...");
-  Serial.println("\nPress any key to start...");
-  
-  unsigned long startTime = millis();
-  const unsigned long timeout = 10000; // 10 seconds timeout
+  handleUART();
 
-  while (keyPad.getChar() == 'N') {
-    if (rfid.PICC_IsNewCardPresent()) {
-      if (readRFID()) {
-        handleAdminMode();
-      } else Serial.println("Invalid RFID access");
-    }
-    delay(200);
-    yield();  // Allow other processes to run
-
-    // Check if timeout has occurred
-    if (millis() - startTime > timeout) {
-      Serial.println("Timeout: continue webSocket connection");
-      return;
-    }
+  if (rfid.PICC_IsNewCardPresent()) {
+    if (readRFID()) {
+      writeUART("ADMIN");
+    }  // Allow other processes to run
   }
-  delay(200);
+  delay(1000);
+}
 
-  // Read keypad input with a timeout of 20 seconds
-  char buffer[20];
-  char* otp = readKeyPad('#', buffer, sizeof(buffer), 20000);
+void handleUART() {
+  String* payload = readUART();  // Read the UART data
 
-  // Check if the string is not empty
-  if (strlen(otp) > 0) {
-    // Print the input string to Serial
-    Serial.print("\nInput String: ");
-    Serial.println(otp);
-    // Send the input string to the server to verify
-    sendVerifyCode(otp);
+  if (payload == nullptr) {  // Check for null pointer
+    Serial.println("No data");
+    return;  // Exit the function if no data received
   }
-  delay(200);
+
+  if (payload[0].length() == 0) {  // Check if the payload has no data
+    Serial.println("Payload is empty");
+    return;
+  }
+
+  if (payload[0] == "verifyCode") {
+    sendVerifyCode(payload[1].c_str());
+  } else if (payload[0] == "sendQR") {
+    // sendQRRequest()
+  } else if (payload[0] == "checkStatus") {
+    String data = "status;";
+    for (int i = 0; i < LOCKERS_NUM; i++) {
+      bool doorState = checkDoorState(i + 1, PCF8574_ADDRESS_1, i);
+      bool objectPresent = checkObject(i + 1, PCF8574_ADDRESS_2, i, i);
+
+      String status = "Door " + String(i + 1) + ": ";
+      status += doorState ? "Closed" : "Open";
+      status += ", ";
+      status += objectPresent ? "Occupied" : "Empty";
+      status += ";";
+      data += status;
+      delay(100);
+    }
+    delay(1000);
+    writeUART(data);
+  } else if (payload[0] == "reset") {
+    // Clear stored WiFi credentials
+    WiFi.disconnect(true);
+    delay(1000);
+
+    // Restart the ESP8266
+    ESP.restart();
+  } else if (payload[0] == "openBoxAdmin") {
+    delay(500);
+    int doorIndex = payload[1].toInt() - 1;
+    Serial.println(doorIndex);
+    openDoorAdmin(doorIndex);
+  } else {
+    Serial.print("Crap message: ");
+    Serial.println(payload[0].c_str());
+  }
+}
+
+String* readUART() {
+  static String array[10];
+  int arrayIndex = 0;
+  unsigned long lastDataReceived = millis();
+
+  char buffer[128] = { 0 };  // Statical allocate buffer and initialize to zero
+
+  while (Serial.available() > 0 && (millis() - lastDataReceived) < 1000) {  // Increase timeout to 1000 ms
+    char c = Serial.read();
+    Serial.write(c);              // Echo received data for testing (optional)
+    lastDataReceived = millis();  // Update last data received time
+
+    if (c == '\n') {
+      if (strlen(buffer) > 0) {  // Check if buffer is not empty
+        array[arrayIndex++] = String(buffer);
+        buffer[0] = '\0';  // Reset buffer
+      }
+      if (arrayIndex == 10) {
+        Serial.println("Serial array overflow");
+        break;
+      }
+      return array;  // Return collected data
+    } else if (c == ';') {
+      if (strlen(buffer) > 0) {  // Check if buffer is not empty
+        array[arrayIndex++] = String(buffer);
+        buffer[0] = '\0';  // Reset buffer
+      }
+    } else {
+      size_t len = strlen(buffer);
+      if (len < sizeof(buffer) - 1) {  // Prevent buffer overflow
+        buffer[len] = c;               // Append character to buffer safely
+        buffer[len + 1] = '\0';        // Null-terminate
+      } else {
+        Serial.println("Serial buffer overflow");
+        break;
+      }
+    }
+    yield();  // Allow other background tasks to run
+  }
+
+  return nullptr;  // No data received or timed out
+}
+
+
+void writeUART(const String& data) {
+  if (!Serial) return;  // Ensure Serial is initialized and available
+
+  for (char c : data) {
+    Serial.write(c);
+  }
+  Serial.write('\n');
 }
 
 void sendVerifyCode(const char* otp) {
   if (connectionState != AUTHENTICATED) {
-    displayMessage("ERROR\nPlease reboot or contact\nadmin for help");
     Serial.println("Locker not authenticated");
     return;
   }
-  DynamicJsonDocument doc(256);
+  JsonDocument doc;
   doc["event"] = "verifyCode";
   doc["data"]["lockerId"] = LOCKER_ID;
   doc["data"]["otp"] = otp;
@@ -545,60 +633,6 @@ void sendVerifyCode(const char* otp) {
 
   Serial.println("Sending verifyCode: " + output);
   webSocket.sendTXT(output);
-  displayMessage("Verifying.");
-  delay(200);
-  displayMessage("Verifying..");
-  delay(200);
-  displayMessage("Verifying...");
-  delay(400);
-}
-
-void checkWifi() {
-  static unsigned long lastWiFiAttempt = 0;
-  unsigned long currentMillis = millis();
-
-  if (currentMillis - lastWiFiAttempt >= 5000) {
-    lastWiFiAttempt = currentMillis;
-
-    if (WiFiMulti.run() == WL_CONNECTED) {
-      Serial.println(F("WiFi connected"));
-      Serial.printf_P(PSTR("IP address: %s\n"), WiFi.localIP().toString().c_str());
-      connectionState = CONNECTING_WEBSOCKET;
-    } else {
-      displayMessage("WiFi not connected");
-      Serial.println(F("WiFi not connected"));
-    }
-  }
-}
-
-void setupKeypad() {
-  while (!keyPad.begin()) {
-    displayMessage("ERROR\nPlease reboot.");
-    Serial.println("ERROR: cannot communicate to keypad.\nPlease reboot.");
-    delay(1000);
-  }
-
-  keyPad.loadKeyMap(keymap);
-  Serial.println("Keypad connected.");
-}
-
-void setupOLED() {
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;)
-      ;  // Infinite loop to halt execution
-  }
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  displayMessage("Booting...");
-}
-
-void displayMessage(const char* message) {
-  display.clearDisplay();
-  display.setCursor(0, 0);   // Start at top-left corner
-  display.println(message);  // Print the message
-  display.display();         // Display the message
 }
 
 bool readRFID() {
@@ -610,7 +644,6 @@ bool readRFID() {
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
     if (tag == "991711115") {
-      displayMessage("WELCOME admin");
       Serial.println("Enter admin mode...");
       return true;
     } else {
@@ -620,220 +653,58 @@ bool readRFID() {
   return false;
 }
 
-char* readKeyPad(char until, char* buffer, uint8_t length, uint16_t timeout) {
-  displayMessage("Enter your OTP: ");
-  Serial.print("Enter your OTP: ");
-  uint8_t bufferIndex = 0;
-  uint32_t start = millis();
-  const uint32_t debounceDelay = 200;
-  uint32_t lastKeyPressTime = 0;
-
-  buffer[0] = '\0';
-
-  while (millis() - start < timeout) {
-    char key = keyPad.getChar();
-
-    if (key != 'N' && key != 'F' && millis() - lastKeyPressTime > debounceDelay) {
-      lastKeyPressTime = millis();
-
-      if (key == until) {
-        buffer[bufferIndex] = '\0';
-        return buffer;
-      } else if (key == '*') {
-        displayMessage("Enter your OTP: ");
-        bufferIndex = 0;
-        buffer[0] = '\0';
-      } else if (bufferIndex < length - 1) {
-        buffer[bufferIndex++] = key;
-        buffer[bufferIndex] = '\0';
-        display.print(key);
-        display.display();
-        Serial.print(key);
-      }
-    }
-
-    yield();
-  }
-  displayMessage("Timeout!");
-  Serial.println("Timeout!");
-  delay(2000);
-
-  // If timeout occurs, return null buffer
-  buffer[0] = '\0';
-  return buffer;
-}
-
-void handleAdminMode() {
-  displayMessage("Admin Mode\n1:Check Doors\n2:Reset WiFi\n3:Change Backup\n4:Open Box\n5:Exit");
-  Serial.println("\nAdmin Mode\n1: Check Doors\n2: Reset WiFi\n3: Change Backup WiFi\n4: Open Box\n5: Exit");
-
-  while (true) {
-    char key = keyPad.getChar();
-    if (key != 'N') {
-      switch (key) {
-        case '1':
-          checkDoors();
-          break;
-        case '2':
-          resetWiFi();
-          break;
-        case '3':
-          changeBackupWiFi();
-          break;
-        case '4':
-          openBoxAdmin();
-          delay(200);  // Debound delay
-          break;
-        case '5':
-          displayMessage("Exiting Admin Mode");
-          Serial.println("Exiting Admin Mode");
-          delay(1000);
-          displayMessage("Press any key to \nstart...");
-          Serial.println("\nPress any key to start...");
-          return;
-        default:
-          displayMessage("Invalid option");
-          Serial.println("Invalid option");
-          delay(1000);
-          break;
-      }
-      displayMessage("Admin Mode\n1:Check Doors\n2:Reset WiFi\n3:Change Backup\n4:Open Box\n5:Exit");
-      Serial.println("\nAdmin Mode\n1: Check Doors\n2: Reset WiFi\n3: Change Backup WiFi\n4: Open Box\n5: Exit");
-    }
-    yield();
-  }
-}
-
-void openBoxAdmin() {
-  Serial.println("Select box to open:");
-  for (int i = 0; i < LOCKERS_NUM; i++) {
-    String menuItem = String(i + 1) + ": Box " + String(i + 1);
-    Serial.println(menuItem);
-  }
-
-  while (true) {
-    displayMessage("Select box to open:");
-
-    for (int i = 0; i < LOCKERS_NUM; i++) {
-      String menuItem = String(i + 1) + ": Box " + String(i + 1);
-      display.println(menuItem);
-      display.display();
-      Serial.println(menuItem);
-    }
-
-    char key = keyPad.getChar();
-    while (key == 'N') {
-      key = keyPad.getChar();
-      yield();
-    }
-    if (key == '*') {
-      displayMessage("Returning to Admin Menu");
-      Serial.println("Returning to Admin Menu");
-      return;
-    }
-
-    int boxNum = key - '1';
-    if (boxNum >= 0 && boxNum < LOCKERS_NUM) {
-      String doorId = LOCKER_ID + "-" + String(boxNum + 1);
-      delay(200);
-      openDoorAdmin(doorId);
-    } else {
-      displayMessage("Invalid box number");
-      Serial.println("Invalid box number");
-      delay(1000);
-    }
-
-    yield();
-  }
-}
-
-void openDoorAdmin(const String& doorId) {
-  int doorIndex = (doorId.substring(doorId.indexOf("-") + 1)).toInt() - 1;
-  Serial.println("Opening door: " + doorId);
+void openDoorAdmin(const int doorIndex) {
+  Serial.printf("Unlocking door: %d\n", doorIndex);
   unlockBox(pwm, doorIndex);
-  delay(2000);
+  delay(1000);
+  Serial.printf("Unlocked door: %d\n", doorIndex);
+
+  bool doorClosed = true;
+
+  // Wait for the door to be opened
+  while (doorClosed) {
+    int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+    if (doorState == 0) {  // Assuming 0 means door is open
+      doorClosed = false;
+      Serial.println("Door opened.");
+      break;
+    }
+    yield();  // Allow other background tasks to run
+  }
+
+  delay(500);
+
+  // If the door was opened, wait for it to be closed
+  while (!doorClosed) {
+    int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+    if (doorState == 1) {  // Assuming 1 means door is closed
+      doorClosed = true;
+      Serial.println("Door closed.");
+      break;
+    }
+    yield();  // Allow other background tasks to run
+  }
+
+  delay(500);
+
   lockBox(pwm, doorIndex);
 }
 
-void checkDoors() {
-  displayMessage("Checking Doors...");
-  Serial.println("Checking Doors...");
-  for (int i = 0; i < LOCKERS_NUM; i++) {
-    bool doorState = checkDoorState(i + 1, PCF8574_ADDRESS_1, i);
-    bool objectPresent = checkObject(i + 1, PCF8574_ADDRESS_2, i, i);
+// void resetWiFi() {
+//   displayMessage("Resetting WiFi...");
+//   // displayMessage("Resetting WiFi...");
+//   // Clear stored WiFi credentials
+//   WiFi.disconnect(true);
+//   delay(1000);
 
-    String status = "Door " + String(i + 1) + ": ";
-    status += doorState ? "Open" : "Closed";
-    status += ", ";
-    status += objectPresent ? "Occupied" : "Empty";
-
-    displayMessage(status.c_str());
-    Serial.println(status);
-    delay(1000);
-  }
-}
-
-void changeBackupWiFi() {
-  // Enter backup WiFi credentials
-  // Enter ssid
-  displayMessage("Enter SSID: ");
-  Serial.println("Enter SSID: ");
-  char ssid[32];
-  backup_ssid = readKeyPad('#', ssid, sizeof(ssid), 10000);
-  delay(200);
-  // Enter password
-  displayMessage("Enter Password: ");
-  Serial.println("Enter Password: ");
-  char password[64];
-  delay(200);
-  backup_password = readKeyPad('#', password, sizeof(password), 10000);
-  delay(200);
-
-  // Clear stored WiFi credentials
-  WiFi.disconnect(true);
-  delay(1000);
-
-  // Save the new WiFi credentials
-  WiFiMulti.addAP(backup_ssid, backup_password);
-  checkWifi();
-}
-
-void resetWiFi() {
-  displayMessage("Resetting WiFi...");
-  Serial.println("Resetting WiFi...");
-  // Clear stored WiFi credentials
-  WiFi.disconnect(true);
-  delay(1000);
-
-  // Restart the ESP8266
-  ESP.restart();
-}
-
-JsonDocument parseJson(const String jsonString) {
-  // Create a StaticJsonDocument with an appropriate size (adjust the size based on your JSON structure)
-  JsonDocument doc;
-
-  // Parse the JSON response
-  DeserializationError error = deserializeJson(doc, jsonString);
-
-  // Check for errors in parsing
-  if (error) {
-    Serial.print(F("deserializeJson() failed: "));
-    Serial.println(error.f_str());
-    return doc;
-  }
-
-  return doc;
-}
+//   // Restart the ESP8266
+//   ESP.restart();
+// }
 
 bool checkDoorState(int boxNumber, int pcf8574Addr, int pcfPin) {
   if (Wire.requestFrom(pcf8574Addr, 1) && Wire.available()) {
     uint8_t state = Wire.read();
     bool pinState = !(state & (1 << pcfPin));
-
-#ifdef DEBUG
-    Serial.printf("Door state of Box %d: %s\n", boxNumber, pinState ? "Open" : "Closed");
-#endif
 
     return pinState;
   }
@@ -855,11 +726,11 @@ bool checkObject(int boxNumber, int pcf8574Addr, int pcfPinX, int pcfPinY) {
 }
 
 void unlockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {
-  pwm.setPWM(servoChannel, 0, angleToPulse(0));  // Unlock position
+  pwm.setPWM(servoChannel, 0, angleToPulse(135));  // Unlock position
 }
 
 void lockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {
-  pwm.setPWM(servoChannel, 0, angleToPulse(90));  // Lock position
+  pwm.setPWM(servoChannel, 0, angleToPulse(0));  // Lock position
 }
 
 int angleToPulse(int angle) {
