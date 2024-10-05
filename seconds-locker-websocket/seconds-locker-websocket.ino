@@ -1,61 +1,41 @@
+#include "../Locker_Setup.h"
 #include <ArduinoJson.h>
 #include <Adafruit_PWMServoDriver.h>
 #include <EEPROM.h>
-#include <ESP8266Ping.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
+#include <WiFi.h>
+#include <WiFiMulti.h>
 #include <MFRC522.h>
 #include <SPI.h>
 #include <WebSocketsClient.h>
 #include <Wire.h>
 
 // Locker setup
-const String LOCKER_ID = "********";
-const int LOCKERS_NUM = 4;
 String token = "";
 unsigned long lastHeartbeat = 0;
 unsigned long lastWiFiAttempt = 0;
 unsigned long lastWebSocketAttempt = 0;
 
-// EEPROM setup
-#define EEPROM_SIZE 512
-#define TOKEN_ADDRESS 0
-#define TOKEN_MAX_LENGTH 256
-
 // WiFi credentials & setup
-const char* ssid = "********";
-const char* password = "********";
-ESP8266WiFiMulti WiFiMulti;
+WiFiMulti WiFiMulti;
 
 // WebSocket setup
 WebSocketsClient webSocket;
-const char* websocket_server = "192.168.x.x";
-const int websocket_port = 3001;
-const char* websocket_url = "/********";
 
 // PCA9685 setup
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
-#define SERVO_MIN 150  // Min pulse length out of 4096
-#define SERVO_MAX 600  // Max pulse length out of 4096
-
-// PCF8574 setup
-#define PCF8574_ADDRESS_1 0x21
-#define PCF8574_ADDRESS_2 0x22
-
 // MFRC522 setup
-constexpr uint8_t RST_PIN = D3;
-constexpr uint8_t SS_PIN = D4;
+constexpr uint8_t RST_PIN = 4;
+constexpr uint8_t SS_PIN = 5;
 
 MFRC522 rfid(SS_PIN, RST_PIN);  // Instance of the class
 MFRC522::MIFARE_Key key;
 
 // Buzzer setup
-constexpr uint8_t BUZZ_PIN = D8;
+constexpr uint8_t BUZZ_PIN = 15;
 
 // Other variables
 int failCount = 0;
-
 
 enum ConnectionState {
   DISCONNECTED,
@@ -78,7 +58,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       {
         Serial.printf("[WSc] Connected to url: %s\n", payload);
         connectionState = CONNECTED;
-        webSocket.sendTXT("Hello from locker" + LOCKER_ID);
+        webSocket.sendTXT("Hello from locker" + String(LOCKER_ID));
       }
       break;
     case WStype_TEXT:
@@ -141,10 +121,10 @@ void setup() {
   pinMode(BUZZ_PIN, OUTPUT);
 
   // Initialize WiFi
-  WiFiMulti.addAP(ssid, password);
+  WiFiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
 
   // Initialize WebSocket connection
-  webSocket.begin(websocket_server, websocket_port, websocket_url);
+  webSocket.begin(WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(5000);
 
@@ -173,8 +153,7 @@ void loop() {
       if (currentMillis - lastWebSocketAttempt > 5000) {
         lastWebSocketAttempt = currentMillis;
         // Serial.printf("Attempting to connect to WebSocket server: %s:%d%s\n", websocket_server, websocket_port, websocket_url);
-        pingServer();
-        webSocket.begin(websocket_server, websocket_port, websocket_url);
+        webSocket.begin(WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
       }
       webSocket.loop();  // Process WebSocket events
 
@@ -212,36 +191,17 @@ void loop() {
   yield();           // Allow other background tasks to run
 }
 
-void pingServer() {
-  IPAddress serverIP;
-  if (WiFi.hostByName(websocket_server, serverIP)) {
-    Serial.print("Pinging ");
-    Serial.print(websocket_server);
-    Serial.print(" [");
-    Serial.print(serverIP);
-    Serial.println("]");
-
-    if (Ping.ping(serverIP)) {
-      Serial.println("Server is reachable");
-    } else {
-      Serial.println("Server is not reachable");
-    }
-  } else {
-    Serial.println("Could not resolve hostname");
-  }
-}
-
 void registerLocker() {
   if (connectionState != CONNECTED) return;
 
   JsonDocument doc;
   doc["event"] = "register";
-  doc["data"]["lockerId"] = LOCKER_ID;
+  doc["data"]["lockerId"] = String(LOCKER_ID);
   JsonArray lockerDoors = doc["data"]["lockerDoors"].to<JsonArray>();
 
-  for (int i = 1; i <= LOCKERS_NUM; i++) {
+  for (int i = 1; i <= LOCKER_DOORS_NUM; i++) {
     JsonObject door = lockerDoors.add<JsonObject>();
-    door["id"] = LOCKER_ID + "-" + String(i);
+    door["id"] = String(LOCKER_ID) + "-" + String(i);
   }
 
   String output;
@@ -265,7 +225,7 @@ void authenticate() {
   JsonDocument doc;
   doc["event"] = "authenticate";
   doc["data"]["token"] = token;
-  doc["data"]["lockerId"] = LOCKER_ID;
+  doc["data"]["lockerId"] = String(LOCKER_ID);
 
   String output;
   serializeJson(doc, output);
@@ -280,7 +240,7 @@ void sendHeartbeat() {
 
   JsonDocument doc;
   doc["event"] = "heartbeat";
-  doc["data"]["lockerId"] = LOCKER_ID;
+  doc["data"]["lockerId"] = String(LOCKER_ID);
   doc["data"]["timestamp"] = millis();
 
   String output;
@@ -381,7 +341,7 @@ void handleCommand(const JsonDocument& doc) {
     // After opening the door, send a success message
     JsonDocument doc;
     doc["event"] = "openCommandSuccess";
-    doc["data"]["lockerId"] = LOCKER_ID;
+    doc["data"]["lockerId"] = String(LOCKER_ID);
     doc["data"]["success"] = true;
 
     String output;
@@ -466,7 +426,7 @@ void sendBoxUsage(const String& doorId, bool isObject) {
 
   JsonDocument doc;
   doc["event"] = "boxUsage";
-  doc["data"]["lockerId"] = LOCKER_ID;
+  doc["data"]["lockerId"] = String(LOCKER_ID);
   doc["data"]["doorId"] = doorId;
   doc["data"]["isObject"] = isObject;
 
@@ -489,37 +449,23 @@ void ringWarning() {
   }
 }
 
-// void ringWarning(int pcf8574Addr, int pcfPin) {
-//   if (Wire.requestFrom(pcf8574Addr, 1) && Wire.available()) {
-// #ifdef DEBUG
-//     Serial.println("Ringing the buzzer");
-// #endif
-//     for (int i = 0; i < 3; i++) {
-//       Wire.write(1 << pcfPin);
-//       delay(500);
-//       Wire.write(0);
-//       delay(500);
-//     }
-//   }
-// }
-
 void handleLockerOperations() {
-  handleUART();
+  handleSerial2();
 
   if (rfid.PICC_IsNewCardPresent()) {
     if (readRFID()) {
-      writeUART("ADMIN");
+      writeSerial2("ADMIN");
     }  // Allow other processes to run
   }
   delay(1000);
 }
 
-void handleUART() {
-  String* payload = readUART();  // Read the UART data
+void handleSerial2() {
+  String *payload = readSerial2();
 
-  if (payload == nullptr) {  // Check for null pointer
-    Serial.println("No data");
-    return;  // Exit the function if no data received
+  if (payload == nullptr) {
+    Serial.println("No data received or readSerial2() returned nullptr");
+    return;
   }
 
   if (payload[0].length() == 0) {  // Check if the payload has no data
@@ -533,7 +479,7 @@ void handleUART() {
     // sendQRRequest()
   } else if (payload[0] == "checkStatus") {
     String data = "status;";
-    for (int i = 0; i < LOCKERS_NUM; i++) {
+    for (int i = 0; i < LOCKER_DOORS_NUM; i++) {
       bool doorState = checkDoorState(i + 1, PCF8574_ADDRESS_1, i);
       bool objectPresent = checkObject(i + 1, PCF8574_ADDRESS_2, i, i);
 
@@ -546,13 +492,13 @@ void handleUART() {
       delay(100);
     }
     delay(1000);
-    writeUART(data);
+    writeSerial2(data);
   } else if (payload[0] == "reset") {
     // Clear stored WiFi credentials
     WiFi.disconnect(true);
     delay(1000);
 
-    // Restart the ESP8266
+    // Restart the ESP32
     ESP.restart();
   } else if (payload[0] == "openBoxAdmin") {
     delay(500);
@@ -565,15 +511,15 @@ void handleUART() {
   }
 }
 
-String* readUART() {
+String *readSerial2() {
   static String array[10];
   int arrayIndex = 0;
   unsigned long lastDataReceived = millis();
 
   char buffer[128] = { 0 };  // Statical allocate buffer and initialize to zero
 
-  while (Serial.available() > 0 && (millis() - lastDataReceived) < 1000) {  // Increase timeout to 1000 ms
-    char c = Serial.read();
+  while (Serial2.available() > 0 && (millis() - lastDataReceived) < 500) {  // Increase timeout to 1000 ms
+    char c = Serial2.read();
     Serial.write(c);              // Echo received data for testing (optional)
     lastDataReceived = millis();  // Update last data received time
 
@@ -583,7 +529,7 @@ String* readUART() {
         buffer[0] = '\0';  // Reset buffer
       }
       if (arrayIndex == 10) {
-        Serial.println("Serial array overflow");
+        Serial.println("Serial2 array overflow");
         break;
       }
       return array;  // Return collected data
@@ -598,24 +544,27 @@ String* readUART() {
         buffer[len] = c;               // Append character to buffer safely
         buffer[len + 1] = '\0';        // Null-terminate
       } else {
-        Serial.println("Serial buffer overflow");
+        Serial.println("Serial2 buffer overflow");
         break;
       }
     }
-    yield();  // Allow other background tasks to run
+    yield();
   }
 
-  return nullptr;  // No data received or timed out
+  return nullptr;  // Return null if we haven't received a complete line
 }
 
 
-void writeUART(const String& data) {
-  if (!Serial) return;  // Ensure Serial is initialized and available
+void writeSerial2(const String& data) {
+  if (!Serial2) {
+    Serial.println("writeSerial2 failed");
+    return;  // Ensure Serial is initialized and available
+  }
 
   for (char c : data) {
-    Serial.write(c);
+    Serial2.write(c);
   }
-  Serial.write('\n');
+  Serial2.write('\n');
 }
 
 void sendVerifyCode(const char* otp) {
@@ -625,7 +574,7 @@ void sendVerifyCode(const char* otp) {
   }
   JsonDocument doc;
   doc["event"] = "verifyCode";
-  doc["data"]["lockerId"] = LOCKER_ID;
+  doc["data"]["lockerId"] = String(LOCKER_ID);
   doc["data"]["otp"] = otp;
 
   String output;

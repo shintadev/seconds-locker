@@ -1,4 +1,5 @@
 #define LOAD_GFXFF
+#include "../Locker_Setup.h"
 #include <FS.h>
 #include "Free_Fonts.h"   // Include the header file attached to this sketch
 #include <TFT_eSPI.h>     // Hardware-specific library
@@ -9,8 +10,8 @@
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke custom library
 
-#define CALIBRATION_FILE "/TouchCalData1"
-#define REPEAT_CAL false
+// #define CALIBRATION_FILE "/TouchCalData1"
+// #define REPEAT_CAL false
 
 void setpx(int16_t x, int16_t y, uint16_t color) {
   tft.drawPixel(x, y, color);  //Thay đổi hàm này thành hàm vẽ pixel mà thư viện led bạn dùng cung cấp
@@ -474,7 +475,7 @@ String *readSerial2() {
         buffer[0] = '\0';  // Reset buffer
       }
       if (arrayIndex == 10) {
-        Serial.println("Serial array overflow");
+        Serial.println("Serial2 array overflow");
         break;
       }
       return array;  // Return collected data
@@ -489,7 +490,7 @@ String *readSerial2() {
         buffer[len] = c;               // Append character to buffer safely
         buffer[len + 1] = '\0';        // Null-terminate
       } else {
-        Serial.println("Serial buffer overflow");
+        Serial.println("Serial2 buffer overflow");
         break;
       }
     }
