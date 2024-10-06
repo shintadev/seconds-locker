@@ -11,10 +11,9 @@
 
 // Locker setup
 String token = "";
+bool initalWebSocketAttempt = true;
 unsigned long lastHeartbeat = 0;
-unsigned long lastWiFiAttempt = 0;
 unsigned long lastWebSocketAttempt = 0;
-
 // WiFi credentials & setup
 WiFiMulti WiFiMulti;
 
@@ -85,8 +84,8 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 
 void setup() {
   Serial.begin(115200);
-  // Serial.setDebugOutput(true);
-
+  Serial.setDebugOutput(true);
+  delay(1000);
   Serial.println("\nStarting...");
 
   // Uncomment the following line to clear the EEPROM (run once, then comment it out again)
@@ -134,28 +133,47 @@ void setup() {
 
 void loop() {
   unsigned long currentMillis = millis();
+  Serial.println("Loop start");
 
   switch (connectionState) {
     case DISCONNECTED:
     case CONNECTING_WIFI:
-      if (currentMillis - lastWiFiAttempt > 5000) {
-        lastWiFiAttempt = currentMillis;
-        if (WiFiMulti.run() == WL_CONNECTED) {
-          Serial.println("WiFi connected");
+      {
+        Serial.println("State: DISCONNECTED or CONNECTING_WIFI");
+        Serial.println("Attempting to connect to WiFi...");
+        WiFi.disconnect(true);  // Disconnect from any previous connection
+        WiFi.mode(WIFI_STA);    // Set WiFi mode to station
+        delay(100);
+        int status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        Serial.printf("WiFi begin status: %d\n", status);
+
+        unsigned long startAttempt = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
+          delay(500);
+          Serial.print(".");
+        }
+        Serial.println();
+
+        if (WiFi.status() == WL_CONNECTED) {
+          Serial.println("WiFi connected successfully");
+          Serial.print("IP address: ");
+          Serial.println(WiFi.localIP());
           connectionState = CONNECTING_WEBSOCKET;
         } else {
-          Serial.println("WiFi not connected");
+          Serial.println("WiFi connection failed");
+          Serial.printf("WiFi status: %d\n", WiFi.status());
         }
       }
       break;
 
     case CONNECTING_WEBSOCKET:
-      if (currentMillis - lastWebSocketAttempt > 5000) {
+      Serial.println("State: CONNECTING_WEBSOCKET");
+      if (initalWebSocketAttempt || currentMillis - lastWebSocketAttempt > 5000) {
+        initalWebSocketAttempt = false;
         lastWebSocketAttempt = currentMillis;
-        // Serial.printf("Attempting to connect to WebSocket server: %s:%d%s\n", websocket_server, websocket_port, websocket_url);
+        Serial.printf("Attempting to connect to WebSocket server: %s:%d%s\n", WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
         webSocket.begin(WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
       }
-      webSocket.loop();  // Process WebSocket events
 
       // Add connection timeout check
       if (currentMillis - lastWebSocketAttempt > 30000) {  // 30 seconds timeout
@@ -165,30 +183,40 @@ void loop() {
       break;
 
     case CONNECTED:
-      if (token.length() > 0) {
-        authenticate();
-      } else {
-        registerLocker();
+      {
+        Serial.println("State: CONNECTED");
+        if (token.length() > 0) {
+          authenticate();
+        } else {
+          registerLocker();
+        }
       }
       break;
 
     case AUTHENTICATING:
-      // Wait for authentication result
+      {
+        Serial.println("State: AUTHENTICATING");
+        // Wait for authentication result
+      }
       break;
 
     case AUTHENTICATED:
-      // Send heartbeat to server once each 10 seconds
-      if (currentMillis - lastHeartbeat > 10000) {
-        lastHeartbeat = currentMillis;
-        sendHeartbeat();
-      }
+      {
+        Serial.println("State: AUTHENTICATED");
+        // Send heartbeat to server once each 10 seconds
+        // if (currentMillis - lastHeartbeat > 10000) {
+        //   lastHeartbeat = currentMillis;
+        //   sendHeartbeat();
+        // }
 
-      // Main locker logic here
-      handleLockerOperations();
+        // Main locker logic here
+        handleLockerOperations();
+      }
       break;
   }
   webSocket.loop();  // Process WebSocket events
   yield();           // Allow other background tasks to run
+  delay(100);
 }
 
 void registerLocker() {
@@ -326,9 +354,11 @@ void handleVerifyCodeResult(const JsonDocument& doc) {
     Serial.print("Box ");
     Serial.print(doc["data"]["lockerDoorId"].as<String>());
     Serial.println(" unlocked.");
+    writeSerial2("verifyStatus;success");
     openDoor(doc["data"]["lockerDoorId"].as<String>());
   } else {
     Serial.println("Code verification failed. Wrong otp!");
+    writeSerial2("verifyStatus;failed");
     failCount++;
   }
 }
@@ -371,7 +401,9 @@ void openDoor(const String& doorId) {
 
   // Wait for the door to be opened
   while (millis() - start < 30000) {
-    int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+    Serial.println("Checking door state");
+    int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
+    Serial.println(doorState);
     if (doorState == 0) {  // Assuming 0 means door is open
       doorClosed = false;
       Serial.println("Door opened.");
@@ -387,7 +419,7 @@ void openDoor(const String& doorId) {
   if (!doorClosed) {
     start = millis();  // Reset timer for door close wait time
     while (millis() - start < 10000 && !doorClosed) {
-      int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+      int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
       if (doorState == 1) {  // Assuming 1 means door is closed
         doorClosed = true;
         Serial.println("Door closed.");
@@ -401,7 +433,7 @@ void openDoor(const String& doorId) {
   // If the door did not close in the given time, issue a warning
   if (!doorClosed) {
     Serial.println("Door is still open! Issuing warning.");
-    while (checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex) == 0) {  // Assuming 0 means door is open
+    while (checkDoorState(PCF8574_ADDRESS_1, doorIndex) == 0) {  // Assuming 0 means door is open
       ringWarning();
       delay(1000);
       yield();  // Allow other background tasks to run
@@ -461,7 +493,7 @@ void handleLockerOperations() {
 }
 
 void handleSerial2() {
-  String *payload = readSerial2();
+  String* payload = readSerial2();
 
   if (payload == nullptr) {
     Serial.println("No data received or readSerial2() returned nullptr");
@@ -480,7 +512,7 @@ void handleSerial2() {
   } else if (payload[0] == "checkStatus") {
     String data = "status;";
     for (int i = 0; i < LOCKER_DOORS_NUM; i++) {
-      bool doorState = checkDoorState(i + 1, PCF8574_ADDRESS_1, i);
+      bool doorState = checkDoorState(PCF8574_ADDRESS_1, i);
       bool objectPresent = checkObject(i + 1, PCF8574_ADDRESS_2, i, i);
 
       String status = "Door " + String(i + 1) + ": ";
@@ -511,7 +543,7 @@ void handleSerial2() {
   }
 }
 
-String *readSerial2() {
+String* readSerial2() {
   static String array[10];
   int arrayIndex = 0;
   unsigned long lastDataReceived = millis();
@@ -553,7 +585,6 @@ String *readSerial2() {
 
   return nullptr;  // Return null if we haven't received a complete line
 }
-
 
 void writeSerial2(const String& data) {
   if (!Serial2) {
@@ -612,7 +643,7 @@ void openDoorAdmin(const int doorIndex) {
 
   // Wait for the door to be opened
   while (doorClosed) {
-    int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+    int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
     if (doorState == 0) {  // Assuming 0 means door is open
       doorClosed = false;
       Serial.println("Door opened.");
@@ -625,7 +656,7 @@ void openDoorAdmin(const int doorIndex) {
 
   // If the door was opened, wait for it to be closed
   while (!doorClosed) {
-    int doorState = checkDoorState(doorIndex + 1, PCF8574_ADDRESS_1, doorIndex);
+    int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
     if (doorState == 1) {  // Assuming 1 means door is closed
       doorClosed = true;
       Serial.println("Door closed.");
@@ -650,11 +681,16 @@ void openDoorAdmin(const int doorIndex) {
 //   ESP.restart();
 // }
 
-bool checkDoorState(int boxNumber, int pcf8574Addr, int pcfPin) {
+bool checkDoorState(int pcf8574Addr, int pcfPin) {
+  Serial.print(Wire.available());
+  Serial.print(" ");
+  Serial.println(Wire.requestFrom(pcf8574Addr, 1));
   if (Wire.requestFrom(pcf8574Addr, 1) && Wire.available()) {
     uint8_t state = Wire.read();
     bool pinState = !(state & (1 << pcfPin));
 
+    Serial.print("Pin State: ");
+    Serial.println(pinState);
     return pinState;
   }
   return false;

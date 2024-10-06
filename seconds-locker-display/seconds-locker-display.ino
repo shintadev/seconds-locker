@@ -52,9 +52,6 @@ ExtendedButtonWidget *btnVerifyQRCode[1];
 ExtendedButtonWidget *btnAdminMenu[4];
 ExtendedButtonWidget *btnOpenBoxAdminMenu[5];
 
-#define BUTTON_W 150
-#define BUTTON_H 50
-
 enum ScreenState {
   LANGUAGE_MENU,
   VERIFY_MENU,
@@ -156,17 +153,18 @@ void btnVerifyOTP_Submit_releaseAction(void) {
   if (btnVerifyOTP[0]->justReleased() && currentScreen == VERIFY_OTP) {
     btnVerifyOTP[0]->drawSmoothButton(false);
     Serial.println("Button Verify OTP Submit is released\n" + userInput);
-    writeSerial2("verifyCode;" + userInput);
-    userInput = "";
-    changeScreen(MESSAGE);
-    displayMessage("Verifying OTP...");
-    delay(2000);
-    // TODO: Add action for this button
-    // verify OTP
-    // if OTP is correct, open the box
-    // if OTP is incorrect, display "OTP is incorrect"
-    // back to language menu screen
-    changeScreen(LANGUAGE_MENU);
+    if (userInput.length() == 6) {
+      writeSerial2("verifyCode;" + userInput);
+      userInput = "";
+      changeScreen(MESSAGE);
+      displayMessage("Verifying OTP...");
+      delay(2000);
+      changeScreen(LANGUAGE_MENU);
+    } else {
+      displayMessage("OTP must be 6 digits");
+      delay(2000);
+      changeScreen(VERIFY_OTP);
+    }
   }
 }
 
@@ -368,7 +366,7 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
   tft.begin();
-  tft.setRotation(1);
+  tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
   tft.setFreeFont(FF18);
 
@@ -454,6 +452,16 @@ void handleSerial2() {
     changeScreen(ADMIN_MENU);
   } else if (payload[0] == "QR") {
     // show QR code
+  } else if (payload[0] == "verifyStatus") {
+    if (payload[1] == "success") {
+      displayMessage("Verified");
+      delay(1000);
+      changeScreen(LANGUAGE_MENU);
+    } else if (payload[1] == "failed") {
+      displayMessage("Verification failed");
+      delay(1000);
+      changeScreen(LANGUAGE_MENU);
+    }
   }
 }
 
