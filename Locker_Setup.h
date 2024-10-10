@@ -1,9 +1,14 @@
 #ifndef LOCKER_SETUP_H
 #define LOCKER_SETUP_H
 
+#include <Arduino.h>
+
 // Common settings
 #define LOCKER_ID "xxxxxx"
 #define LOCKER_DOORS_NUM x
+
+// Buzzer settings
+constexpr uint8_t BUZZ_PIN = x;
 
 // WiFi settings
 #define WIFI_SSID "xxxxxx"

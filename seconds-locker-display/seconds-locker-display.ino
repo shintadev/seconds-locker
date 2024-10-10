@@ -64,4 +64,5 @@ void loop() {
 
   tft.unloadFont();
   yield();
+  delay(100);
 }
