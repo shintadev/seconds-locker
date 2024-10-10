@@ -57,7 +57,7 @@ void loop() {
 
   handleCurrentScreen();
 
-  if (currentMillis - lastSerial2Read > 500) {
+  if (currentMillis - lastSerial2Read >= 500) {
     lastSerial2Read = currentMillis;
     handleSerial2();
   }

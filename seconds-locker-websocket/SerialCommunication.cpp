@@ -1,6 +1,7 @@
 #include "SerialCommunication.h"
 #include "../Locker_Setup.h"
-#include "ScreenManagement.h"
+#include "WebSocketHandlers.h"
+#include "LockerOperations.h"
 
 void handleSerial2() {
   String* payload = readSerial2();
@@ -15,27 +16,41 @@ void handleSerial2() {
     return;
   }
 
-  if (payload[0] == "ADMIN") {
-    Serial.println("Enter Admin Mode");
-    changeScreen(ADMIN_MENU);
-  } else if (payload[0] == "status") {
-    for (int i = 0; i < sizeof(payload); i++) {
-      displayMessage(payload[i + 1]);
-      delay(1500);
+  if (payload[0] == "verifyCode") {
+    sendVerifyCode(payload[1].c_str());
+  } else if (payload[0] == "sendQR") {
+    // sendQRRequest()
+  } else if (payload[0] == "checkStatus") {
+    String data = "status;";
+    for (int i = 0; i < LOCKER_DOORS_NUM; i++) {
+      bool doorState = checkDoorState(PCF8574_ADDRESS_1, i);
+      bool objectPresent = checkObject(i + 1, PCF8574_ADDRESS_2, i, i);
+
+      String status = "Door " + String(i + 1) + ": ";
+      status += doorState ? "Closed" : "Open";
+      status += ", ";
+      status += objectPresent ? "Occupied" : "Empty";
+      status += ";";
+      data += status;
+      delay(100);
     }
-    changeScreen(ADMIN_MENU);
-  } else if (payload[0] == "QR") {
-    // show QR code
-  } else if (payload[0] == "verifyStatus") {
-    if (payload[1] == "success") {
-      displayMessage("Verified");
-      delay(1000);
-      changeScreen(LANGUAGE_MENU);
-    } else if (payload[1] == "failed") {
-      displayMessage("Verification failed");
-      delay(1000);
-      changeScreen(LANGUAGE_MENU);
-    }
+    delay(1000);
+    writeSerial2(data);
+  } else if (payload[0] == "reset") {
+    // Clear stored WiFi credentials
+    WiFi.disconnect(true);
+    delay(1000);
+
+    // Restart the ESP32
+    ESP.restart();
+  } else if (payload[0] == "openBoxAdmin") {
+    delay(500);
+    int doorIndex = payload[1].toInt() - 1;
+    Serial.println(doorIndex);
+    openDoorAdmin(doorIndex);
+  } else {
+    Serial.print("Crap message: ");
+    Serial.println(payload[0].c_str());
   }
 }
 
