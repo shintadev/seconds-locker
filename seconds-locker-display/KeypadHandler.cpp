@@ -5,10 +5,10 @@ char keymap[19] = "123A456B789C*0#DNF";  // ... NoKey  Fail }
 
 void setupKeypad() {
   while (!keyPad.begin()) {
-    displayMessage("ERROR\nPlease reboot.");
+    displayMessage("ERROR! Please reboot.");
     Serial.println("ERROR: cannot communicate to keypad.\nPlease reboot.");
-    ESP.restart();
     delay(1000);
+    ESP.restart();
   }
 
   keyPad.loadKeyMap(keymap);
