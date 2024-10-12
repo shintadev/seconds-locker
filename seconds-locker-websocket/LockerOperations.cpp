@@ -160,12 +160,14 @@ void ringWarning() {
   }
 }
 
-void unlockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {
+void unlockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {                                                                                                                                                                                                                     
+  pwm.setPWM(servoChannel, 0, angleToPulse(120));
+  delay(500);
   pwm.setPWM(servoChannel, 0, angleToPulse(105));  // Unlock position
 }
 
 void lockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {
-  pwm.setPWM(servoChannel, 0, angleToPulse(20));  // Lock position
+  pwm.setPWM(servoChannel, 0, angleToPulse(5));  // Lock position
 }
 
 int angleToPulse(int angle) {
