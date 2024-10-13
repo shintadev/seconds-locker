@@ -47,5 +47,6 @@ void handleVerifyQRCode();
 void handleAdminMenu();
 void handleOpenBoxAdminMenu();
 void handleMessage();
+void displayQRcode(int offset_x, int offset_y, int element_size, int QRsize, int ECC_Mode, const char *Message);
 
 #endif
