@@ -18,7 +18,7 @@ enum ScreenState {
 };
 
 extern TFT_eSPI tft;
-extern MakeFont myfont;
+extern MakeFont myFont;
 extern ScreenState currentScreen;
 extern String userInput;
 extern unsigned long inactivityTimer;

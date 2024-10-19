@@ -13,7 +13,7 @@
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke custom library
 
-MakeFont myfont(&setpx);
+MakeFont myFont(&setPixel);
 
 ExtendedButtonWidget *btnLanguageMenu[2];
 ExtendedButtonWidget *btnVerifyMenu[2];
