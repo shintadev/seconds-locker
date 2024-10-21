@@ -17,6 +17,9 @@
 QRCode qrcode;
 
 void changeScreen(ScreenState newScreen) {
+  if (currentScreen == newScreen) {
+    return;
+  }
   currentScreen = newScreen;
   tft.fillScreen(BACKGROUND);
 
@@ -29,6 +32,9 @@ void changeScreen(ScreenState newScreen) {
   for (int i = 0; i < LOCKER_DOORS_NUM + 1; i++) btnOpenBoxAdminMenu[i]->press(false);
 
   switch (newScreen) {
+    case LOADING:
+      setupLoadingScreen();
+      break;
     case LANGUAGE_MENU:
       setupLanguageMenu();
       break;
@@ -55,6 +61,9 @@ void changeScreen(ScreenState newScreen) {
 
 void handleCurrentScreen() {
   switch (currentScreen) {
+    case LOADING:
+      handleLoadingScreen();
+      break;
     case LANGUAGE_MENU:
       handleLanguageMenu();
       break;
@@ -78,6 +87,11 @@ void handleCurrentScreen() {
       handleMessage();
       break;
   }
+}
+
+void setupLoadingScreen() {
+  myFont.print(100, 120, const_cast<char*>("Connecting..."), TITLE, BACKGROUND);
+  myFont.print(100, 160, const_cast<char*>("Please wait"), TITLE, BACKGROUND);
 }
 
 void setupLanguageMenu() {
@@ -161,6 +175,13 @@ void setupVerifyOTP() {
 void setupVerifyQRCode() {
   uint16_t x = tft.width() - 80;
   uint16_t y = 30;
+  String url;
+
+  if (language == "EN") {
+    url = "http://192.168.1.208:3000/lockers/locker1-1/open";
+  } else if (language == "VN") {
+    url = "http://192.168.1.208:3000/lockers/locker1-2/open";
+  }
 
   // QR code parameters
   int qrElementSize = 3;  // Increase the size of each QR code element
@@ -177,7 +198,7 @@ void setupVerifyQRCode() {
   tft.fillRect(qrX - borderWidth, qrY - borderWidth, totalSizeWithBorder, totalSizeWithBorder, TFT_WHITE);
 
   //Display QR Code
-  displayQRcode(qrX, qrY, qrElementSize, qrVersion, ECC_HIGH, "This function is unavailable now");
+  displayQRcode(qrX, qrY, qrElementSize, qrVersion, ECC_HIGH, url.c_str());
 
   btnVerifyQRCode[0]->initButtonUL(x, y, BUTTON_W - 100, BUTTON_H, BUTTON_BORDER, BUTTON_FILL_2, BUTTON_TEXT, const_cast<char*>("X"), 1);
   btnVerifyQRCode[0]->setPressAction(btnVerifyQRCode_Cancel_pressAction);
@@ -250,6 +271,20 @@ void displayMessage(String message) {
   tft.setTextColor(TITLE);
   tft.setCursor(50, tft.height() / 2 - 50);
   tft.println(message);
+}
+
+void handleLoadingScreen() {
+  static uint32_t lastDotTime = 0;
+  static int dotCount = 0;
+
+  if (millis() - lastDotTime > 500) {
+    lastDotTime = millis();
+    tft.fillRect(280, 160, 100, 30, BACKGROUND);
+    for (int i = 0; i < dotCount; i++) {
+      myFont.print(280 + i * 20, 160, const_cast<char*>("."), TITLE, BACKGROUND);
+    }
+    dotCount = (dotCount + 1) % 4;
+  }
 }
 
 void handleLanguageMenu() {
@@ -413,7 +448,9 @@ void handleOpenBoxAdminMenu() {
 }
 
 void handleMessage() {
-  // Handle message screen updates if needed
+  if (millis() - inactivityTimer > 30000) {
+    changeScreen(LANGUAGE_MENU);
+  }
 }
 
 void displayQRcode(int offset_x, int offset_y, int element_size, int QRsize, int ECC_Mode, const char* Message) {

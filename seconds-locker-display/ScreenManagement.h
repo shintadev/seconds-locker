@@ -8,6 +8,7 @@
 #include "FontMaker.h"
 
 enum ScreenState {
+  LOADING,
   LANGUAGE_MENU,
   VERIFY_MENU,
   VERIFY_OTP,
@@ -21,7 +22,7 @@ extern TFT_eSPI tft;
 extern MakeFont myFont;
 extern ScreenState currentScreen;
 extern String userInput;
-extern unsigned long inactivityTimer;
+extern uint32_t inactivityTimer;
 extern String language;
 extern I2CKeyPad keyPad;
 extern ExtendedButtonWidget *btnLanguageMenu[2];
@@ -33,6 +34,7 @@ extern ExtendedButtonWidget *btnOpenBoxAdminMenu[LOCKER_DOORS_NUM + 1];
 
 void changeScreen(ScreenState newScreen);
 void handleCurrentScreen();
+void setupLoadingScreen();
 void setupLanguageMenu();
 void setupVerifyMenu();
 void setupVerifyOTP();
@@ -40,6 +42,7 @@ void setupVerifyQRCode();
 void setupAdminMenu();
 void setupOpenBoxAdminMenu();
 void displayMessage(String message);
+void handleLoadingScreen();
 void handleLanguageMenu();
 void handleVerifyMenu();
 void handleVerifyOTP(char *buffer, uint8_t length, uint16_t timeout);

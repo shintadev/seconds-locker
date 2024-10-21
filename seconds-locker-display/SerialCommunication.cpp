@@ -15,7 +15,17 @@ void handleSerial2() {
     return;
   }
 
-  if (payload[0] == "ADMIN") {
+  // Reset the timeout for any valid message
+  serial2Timeout = millis();
+  Serial.println("Serial2 timeout reset");
+
+  if (payload[0] == "READY") {
+    if (currentScreen == LOADING) {
+      changeScreen(LANGUAGE_MENU);
+    }
+  } else if (payload[0] == "NOT_READY") {
+    changeScreen(LOADING);
+  } else if (payload[0] == "ADMIN") {
     Serial.println("Enter Admin Mode");
     changeScreen(ADMIN_MENU);
   } else if (payload[0] == "status") {
@@ -50,7 +60,7 @@ void handleSerial2() {
 String* readSerial2() {
   static String array[10];
   int arrayIndex = 0;
-  unsigned long lastDataReceived = millis();
+  uint32_t lastDataReceived = millis();
 
   char buffer[128] = { 0 };  // Statical allocate buffer and initialize to zero
 
@@ -100,4 +110,5 @@ void writeSerial2(const String& data) {
     Serial2.write(c);
   }
   Serial2.write('\n');
+  Serial.println("data sent: " + data);
 }

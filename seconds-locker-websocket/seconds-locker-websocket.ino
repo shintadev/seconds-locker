@@ -16,8 +16,6 @@
 // Locker setup
 String token = "";
 bool initalWebSocketAttempt = true;
-unsigned long lastHeartbeat = 0;
-unsigned long lastWebSocketAttempt = 0;
 
 // WiFi credentials & setup
 WiFiMulti WiFiMulti;
@@ -36,7 +34,10 @@ MFRC522 rfid(SS_PIN, RST_PIN);  // Instance of the class
 MFRC522::MIFARE_Key key;
 
 // Other variables
-unsigned long lastSerial2Read = 0;
+uint32_t lastHeartbeat = 0;
+uint32_t lastWebSocketAttempt = 0;
+uint32_t lastSerial2Write = 0;
+uint32_t lastSerial2Read = 0;
 int failCount = 0;
 
 ConnectionState connectionState = DISCONNECTED;
@@ -88,21 +89,32 @@ void setup() {
   connectionState = CONNECTING_WIFI;
   delay(1000);
   // Ring a new melody to announce setup completion
-  for (int i = 0; i < 2; i++) {
-    digitalWrite(BUZZ_PIN, HIGH);
-    delay(100);
-    digitalWrite(BUZZ_PIN, LOW);
-    delay(50);
-    digitalWrite(BUZZ_PIN, HIGH);
-    delay(50);
-    digitalWrite(BUZZ_PIN, LOW);
-    delay(100);
-  }
+  digitalWrite(BUZZ_PIN, HIGH);
+  delay(100);
+  digitalWrite(BUZZ_PIN, LOW);
+  delay(50);
+  digitalWrite(BUZZ_PIN, HIGH);
+  delay(50);
+  digitalWrite(BUZZ_PIN, LOW);
+  delay(100);
   Serial.println("Setup finished");
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  uint32_t currentMillis = millis();
+
+  if (connectionState != AUTHENTICATED && currentMillis - lastSerial2Write >= 5000) {
+    if (connectionState == CONNECTING_WEBSOCKET || connectionState == AUTHENTICATING) {
+      // Add a delay before sending NOT_READY during connection attempts
+      if (currentMillis - lastWebSocketAttempt > 10000) {
+        writeSerial2("NOT_READY");
+        lastSerial2Write = currentMillis;
+      }
+    } else {
+      writeSerial2("NOT_READY");
+      lastSerial2Write = currentMillis;
+    }
+  }
 
   switch (connectionState) {
     case DISCONNECTED:
@@ -116,7 +128,7 @@ void loop() {
         int status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
         Serial.printf("WiFi begin status: %d\n", status);
 
-        unsigned long startAttempt = millis();
+        uint32_t startAttempt = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
           delay(500);
           Serial.print(".");
@@ -183,6 +195,11 @@ void loop() {
           handleSerial2();
         }
 
+        if (currentMillis - lastSerial2Write >= 5000) {
+          writeSerial2("READY");
+          lastSerial2Write = currentMillis;
+        }
+
         handleLockerOperations();
       }
       break;
@@ -191,4 +208,9 @@ void loop() {
   webSocket.loop();  // Process WebSocket events
   yield();           // Allow other background tasks to run
   delay(100);
+}
+
+void enterDeepSleep() {
+  Serial.println("Entering deep sleep mode");
+  esp_deep_sleep_start();
 }

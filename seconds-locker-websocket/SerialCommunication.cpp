@@ -57,7 +57,7 @@ void handleSerial2() {
 String* readSerial2() {
   static String array[10];
   int arrayIndex = 0;
-  unsigned long lastDataReceived = millis();
+  uint32_t lastDataReceived = millis();
 
   char buffer[128] = { 0 };  // Statical allocate buffer and initialize to zero
 
@@ -107,4 +107,5 @@ void writeSerial2(const String& data) {
     Serial2.write(c);
   }
   Serial2.write('\n');
+  Serial.println("data sent: " + data);
 }
