@@ -5,10 +5,10 @@
 #include "FontMaker.h"
 
 extern TFT_eSPI tft;
-extern MakeFont myfont;
+extern MakeFont myFont;
 
 void initializeDisplay();
 void touch_calibrate();
-void setpx(int16_t x, int16_t y, uint16_t color);
+void setPixel(int16_t x, int16_t y, uint16_t color);
 
 #endif

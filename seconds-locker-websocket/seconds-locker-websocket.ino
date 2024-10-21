@@ -87,6 +87,17 @@ void setup() {
 
   connectionState = CONNECTING_WIFI;
   delay(1000);
+  // Ring a new melody to announce setup completion
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(BUZZ_PIN, HIGH);
+    delay(100);
+    digitalWrite(BUZZ_PIN, LOW);
+    delay(50);
+    digitalWrite(BUZZ_PIN, HIGH);
+    delay(50);
+    digitalWrite(BUZZ_PIN, LOW);
+    delay(100);
+  }
   Serial.println("Setup finished");
 }
 
@@ -160,7 +171,7 @@ void loop() {
 
     case AUTHENTICATED:
       {
-        Serial.println("State: AUTHENTICATED");
+        // Serial.println("State: AUTHENTICATED");
         // Send heartbeat to server once each 10 seconds
         // if (currentMillis - lastHeartbeat > 10000) {
         //   lastHeartbeat = currentMillis;

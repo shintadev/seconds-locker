@@ -20,6 +20,8 @@ void openDoor(const String& doorId) {
     Serial.println("Something wrong here at openDoor");
     return;
   }
+  writeSerial2("openDoor;" + String(doorIndex + 1));
+
   Serial.printf("Unlocking door: %d\n", doorIndex);
   unlockBox(pwm, doorIndex);
   failCount = 0;
@@ -32,7 +34,7 @@ void openDoor(const String& doorId) {
 
   // Wait for the door to be opened
   while (millis() - start < 30000) {
-    Serial.println("Checking door state");
+    // Serial.println("Checking door state");
     int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
     Serial.println(doorState);
     if (doorState == 0) {  // Assuming 0 means door is open
@@ -64,6 +66,7 @@ void openDoor(const String& doorId) {
   // If the door did not close in the given time, issue a warning
   if (!doorClosed) {
     Serial.println("Door is still open! Issuing warning.");
+    writeSerial2("warning");
     while (checkDoorState(PCF8574_ADDRESS_1, doorIndex) == 0) {  // Assuming 0 means door is open
       ringWarning();
       delay(1000);
@@ -71,6 +74,7 @@ void openDoor(const String& doorId) {
     }
   }
 
+  writeSerial2("offWarning");
   delay(500);
 
   lockBox(pwm, doorIndex);
@@ -119,15 +123,15 @@ void openDoorAdmin(const int doorIndex) {
 }
 
 bool checkDoorState(int pcf8574Addr, int pcfPin) {
-  Serial.print(Wire.available());
-  Serial.print(" ");
-  Serial.println(Wire.requestFrom(pcf8574Addr, 1));
+  // Serial.print(Wire.available());
+  // Serial.print(" ");
+  // Serial.println(Wire.requestFrom(pcf8574Addr, 1));
   if (Wire.requestFrom(pcf8574Addr, 1) && Wire.available()) {
     uint8_t state = Wire.read();
     bool pinState = !(state & (1 << pcfPin));
 
-    Serial.print("Pin State: ");
-    Serial.println(pinState);
+    // Serial.print("Pin State: ");
+    // Serial.println(pinState);
     return pinState;
   }
   return false;
@@ -174,3 +178,4 @@ int angleToPulse(int angle) {
   int pulse = map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
   return pulse;
 }
+

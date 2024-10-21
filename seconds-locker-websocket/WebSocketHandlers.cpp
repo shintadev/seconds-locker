@@ -116,6 +116,7 @@ void handleVerifyCodeResult(const JsonDocument& doc) {
     Serial.print(doc["data"]["lockerDoorId"].as<String>());
     Serial.println(" unlocked.");
     writeSerial2("verifyStatus;success");
+    delay(2000);
     openDoor(doc["data"]["lockerDoorId"].as<String>());
   } else {
     Serial.println("Code verification failed. Wrong otp!");

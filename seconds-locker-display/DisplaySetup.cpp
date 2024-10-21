@@ -6,13 +6,13 @@
 
 void initializeDisplay() {
   tft.begin();
-  tft.setRotation(3);
+  tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   tft.setFreeFont(FF18);
-  myfont.set_font(SansSerif16);
+  myFont.set_font(SansSerif16);
 }
 
-void setpx(int16_t x, int16_t y, uint16_t color) {
+void setPixel(int16_t x, int16_t y, uint16_t color) {
   tft.drawPixel(x, y, color);
 }
 

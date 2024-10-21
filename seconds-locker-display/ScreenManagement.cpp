@@ -86,7 +86,7 @@ void setupLanguageMenu() {
   // tft.setTextColor(TFT_BLACK);
   // tft.setCursor(50, 50);
   // tft.drawString("Choose a language",50,50);
-  myfont.print(100, 50, const_cast<char*>("Choose a language:"), TITLE, BACKGROUND);
+  myFont.print(100, 50, const_cast<char*>("Choose a language:"), TITLE, BACKGROUND);
 
   btnLanguageMenu[0]->initButtonUL(x, y, BUTTON_W, BUTTON_H, BUTTON_BORDER, BUTTON_FILL, BUTTON_TEXT, const_cast<char*>("EN"), 1);
   btnLanguageMenu[0]->setPressAction(btnLanguageMenu_EN_pressAction);
@@ -107,9 +107,9 @@ void setupVerifyMenu() {
   // tft.setCursor(50, 50);
 
   if (language == "EN") {
-    myfont.print(50, 50, const_cast<char*>("Select a verification method:"), TITLE, BACKGROUND);
+    myFont.print(50, 50, const_cast<char*>("Select a verification method:"), TITLE, BACKGROUND);
   } else if (language == "VN") {
-    myfont.print(50, 50, const_cast<char*>("Chọn phương thức xác thực:"), TITLE, BACKGROUND);
+    myFont.print(50, 50, const_cast<char*>("Chọn phương thức xác thực:"), TITLE, BACKGROUND);
   }
 
   btnVerifyMenu[0]->initButtonUL(x, y, BUTTON_W, BUTTON_H, BUTTON_BORDER, BUTTON_FILL, BUTTON_TEXT, const_cast<char*>("OTP"), 1);
@@ -127,13 +127,13 @@ void setupVerifyMenu() {
 void setupVerifyOTP() {
   uint16_t x = (tft.width() - BUTTON_W) / 4;
   uint16_t y = tft.height() * 3 / 4;
-  // tft.setTextColor(TFT_BLACK);
+  tft.setTextColor(TFT_BLACK);
   // tft.setCursor(50, 50);
 
   if (language == "EN") {
-    myfont.print(100, 50, const_cast<char*>("Enter OTP"), TITLE, BACKGROUND);
+    myFont.print(100, 50, const_cast<char*>("Enter OTP"), TITLE, BACKGROUND);
   } else if (language == "VN") {
-    myfont.print(100, 50, const_cast<char*>("Nhập mã OTP"), TITLE, BACKGROUND);
+    myFont.print(100, 50, const_cast<char*>("Nhập mã OTP"), TITLE, BACKGROUND);
   }
 
   // Calculate the position to center the text field
