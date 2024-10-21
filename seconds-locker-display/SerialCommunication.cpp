@@ -28,21 +28,22 @@ void handleSerial2() {
     // show QR code
   } else if (payload[0] == "verifyStatus") {
     if (payload[1] == "success") {
+      changeScreen(MESSAGE);
       displayMessage("Verified");
-      delay(1000);
-      changeScreen(LANGUAGE_MENU);
     } else if (payload[1] == "failed") {
       displayMessage("Verification failed");
-      delay(1000);
+      delay(2000);
       changeScreen(LANGUAGE_MENU);
     }
   } else if (payload[0] == "warning") {
     displayMessage("Time is up, please close the door");
-    delay(1000);
   } else if (payload[0] == "offWarning") {
     displayMessage("Door is closed");
     delay(1000);
     changeScreen(LANGUAGE_MENU);
+  } else if (payload[0] == "openDoor") {
+    changeScreen(MESSAGE);
+    displayMessage("Door " + payload[1] + " is opening");
   }
 }
 
