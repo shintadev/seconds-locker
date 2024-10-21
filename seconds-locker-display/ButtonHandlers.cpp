@@ -130,7 +130,6 @@ void btnVerifyOTP_Submit_releaseAction(void) {
       changeScreen(MESSAGE);
       displayMessage("Verifying OTP...");
       delay(2000);
-      changeScreen(LANGUAGE_MENU);
     } else {
       displayMessage("OTP must be 6 digits");
       delay(2000);

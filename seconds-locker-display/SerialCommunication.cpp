@@ -36,6 +36,13 @@ void handleSerial2() {
       delay(1000);
       changeScreen(LANGUAGE_MENU);
     }
+  } else if (payload[0] == "warning") {
+    displayMessage("Time is up, please close the door");
+    delay(1000);
+  } else if (payload[0] == "offWarning") {
+    displayMessage("Door is closed");
+    delay(1000);
+    changeScreen(LANGUAGE_MENU);
   }
 }
 

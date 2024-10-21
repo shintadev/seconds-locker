@@ -64,6 +64,7 @@ void openDoor(const String& doorId) {
   // If the door did not close in the given time, issue a warning
   if (!doorClosed) {
     Serial.println("Door is still open! Issuing warning.");
+    writeSerial2("warning");
     while (checkDoorState(PCF8574_ADDRESS_1, doorIndex) == 0) {  // Assuming 0 means door is open
       ringWarning();
       delay(1000);
@@ -71,6 +72,7 @@ void openDoor(const String& doorId) {
     }
   }
 
+  writeSerial2("offWarning");
   delay(500);
 
   lockBox(pwm, doorIndex);
