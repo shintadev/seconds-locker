@@ -33,7 +33,7 @@ void openDoor(const String& doorId) {
   bool doorClosed = true;
 
   // Wait for the door to be opened
-  while (millis() - start < 30000) {
+  while (millis() - start < DOOR_OPEN_TIMEOUT) {
     // Serial.println("Checking door state");
     int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
     Serial.println(doorState);
@@ -51,7 +51,7 @@ void openDoor(const String& doorId) {
   // If the door was opened, wait for it to be closed
   if (!doorClosed) {
     start = millis();  // Reset timer for door close wait time
-    while (millis() - start < 10000 && !doorClosed) {
+    while (millis() - start < DOOR_CLOSE_TIMEOUT && !doorClosed) {
       int doorState = checkDoorState(PCF8574_ADDRESS_1, doorIndex);
       if (doorState == 1) {  // Assuming 1 means door is closed
         doorClosed = true;
@@ -164,7 +164,7 @@ void ringWarning() {
   }
 }
 
-void unlockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {                                                                                                                                                                                                                     
+void unlockBox(Adafruit_PWMServoDriver& pwm, int servoChannel) {
   pwm.setPWM(servoChannel, 0, angleToPulse(120));
   delay(500);
   pwm.setPWM(servoChannel, 0, angleToPulse(105));  // Unlock position
@@ -178,4 +178,3 @@ int angleToPulse(int angle) {
   int pulse = map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
   return pulse;
 }
-

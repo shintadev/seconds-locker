@@ -21,7 +21,7 @@ private:
 
 extern TFT_eSPI tft;
 extern String userInput;
-extern unsigned long inactivityTimer;
+extern uint32_t inactivityTimer;
 extern ExtendedButtonWidget *btnLanguageMenu[2];
 extern ExtendedButtonWidget *btnVerifyMenu[2];
 extern ExtendedButtonWidget *btnVerifyOTP[2];

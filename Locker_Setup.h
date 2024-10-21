@@ -4,20 +4,25 @@
 #include <Arduino.h>
 
 // Common settings
-#define LOCKER_ID "xxxxxx"
+#define LOCKER_ID "xxxxxxxx"
 #define LOCKER_DOORS_NUM x
+#define DOOR_OPEN_TIMEOUT 30000
+#define DOOR_CLOSE_TIMEOUT 10000
 
 // Buzzer settings
-constexpr uint8_t BUZZ_PIN = x;
+constexpr uint8_t BUZZ_PIN = 15;
 
 // WiFi settings
-#define WIFI_SSID "xxxxxx"
-#define WIFI_PASSWORD "xxxxxx"
+#define WIFI_SSID "xxxxxxxx"
+#define WIFI_PASSWORD "xxxxxxxx"
 
 // WebSocket settings
 #define WEBSOCKET_SERVER "192.168.x.x"
 #define WEBSOCKET_PORT x
 #define WEBSOCKET_URL "/"
+
+// QR Code settings
+#define QR_URL "xxxxxx"
 
 // Servo settings
 #define SERVO_MIN 150

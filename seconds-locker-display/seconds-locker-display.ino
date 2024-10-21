@@ -25,9 +25,10 @@ ExtendedButtonWidget *btnOpenBoxAdminMenu[LOCKER_DOORS_NUM + 1];
 ScreenState currentScreen = LANGUAGE_MENU;
 
 String userInput = "";
-unsigned long lastSerial2Read = 0;
-unsigned long inactivityTimer = 0;
 String language = "EN";
+uint32_t lastSerial2Read = 0;
+uint32_t inactivityTimer = 0;
+uint32_t serial2Timeout = 0;
 
 // Keypad setup
 I2CKeyPad keyPad(KEYPAD_ADDRESS);
@@ -49,13 +50,26 @@ void setup() {
   initializeButtons();
 
   touch_calibrate();
-  changeScreen(LANGUAGE_MENU);
+  changeScreen(LOADING);
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  uint32_t currentMillis = millis();
 
   handleCurrentScreen();
+
+  if (currentMillis - serial2Timeout >= 10000) {
+    Serial.println("Serial2 timeout");
+    Serial.print("Time since last valid message: ");
+    Serial.print((currentMillis - serial2Timeout) / 1000);
+    Serial.println(" seconds");
+    Serial.print("Current millis: ");
+    Serial.println(currentMillis);
+    Serial.print("Last serial2Timeout: ");
+    Serial.println(serial2Timeout);
+    changeScreen(LOADING);
+    serial2Timeout = currentMillis;  // Reset the timeout to prevent continuous triggers
+  }
 
   if (currentMillis - lastSerial2Read >= 500) {
     lastSerial2Read = currentMillis;

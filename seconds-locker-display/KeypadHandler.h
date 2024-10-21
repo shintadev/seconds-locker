@@ -5,7 +5,7 @@
 
 extern I2CKeyPad keyPad;
 extern String userInput;
-extern unsigned long inactivityTimer;
+extern uint32_t inactivityTimer;
 
 void setupKeypad();
 void handleKeypadInput(uint32_t &lastKeyPressTime, uint32_t debounceDelay, char *&buffer, uint8_t &bufferIndex, uint8_t &length);
