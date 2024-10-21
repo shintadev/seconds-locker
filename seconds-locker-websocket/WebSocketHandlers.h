@@ -28,5 +28,6 @@ void authenticate();
 void sendHeartbeat();
 void sendVerifyCode(const char* otp);
 void sendBoxUsage(const String& doorId, bool isObject);
+void sendWarning();
 
 #endif

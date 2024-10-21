@@ -121,6 +121,7 @@ void handleVerifyCodeResult(const JsonDocument& doc) {
   } else {
     Serial.println("Code verification failed. Wrong otp!");
     writeSerial2("verifyStatus;failed");
+    ringWarning();
     failCount++;
   }
 }
@@ -236,5 +237,21 @@ void sendBoxUsage(const String& doorId, bool isObject) {
   serializeJson(doc, output);
 
   Serial.println("Sending boxUsage: " + output);
+  webSocket.sendTXT(output);
+}
+
+void sendWarning() {
+  if (connectionState != AUTHENTICATED) return;
+
+  ringWarning();
+
+  JsonDocument doc;
+  doc["event"] = "warning";
+  doc["data"]["lockerId"] = String(LOCKER_ID);
+
+  String output;
+  serializeJson(doc, output);
+
+  Serial.println("Sending warning: " + output);
   webSocket.sendTXT(output);
 }

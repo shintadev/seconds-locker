@@ -6,6 +6,12 @@
 #include <Wire.h>
 
 void handleLockerOperations() {
+  if (failCount > 3) {
+    Serial.println("Too many failed attempts. Going to buzzer warning.");
+    sendWarning();
+    failCount = 0;
+  }
+
   if (rfid.PICC_IsNewCardPresent()) {
     if (readRFID()) {
       writeSerial2("ADMIN");
