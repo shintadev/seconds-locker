@@ -1,7 +1,7 @@
 #ifndef BUTTON_HANDLERS_H
 #define BUTTON_HANDLERS_H
 
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <TFT_eWidget.h>

@@ -1,5 +1,5 @@
 #include "LockerOperations.h"
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include "WebSocketHandlers.h"
 #include "SerialCommunication.h"
 #include "RFIDHandler.h"

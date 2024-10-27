@@ -1,5 +1,5 @@
 #define LOAD_GFXFF
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include "DisplaySetup.h"
 #include "ButtonHandlers.h"
 #include "ScreenManagement.h"

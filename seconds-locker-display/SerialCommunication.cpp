@@ -1,5 +1,5 @@
 #include "SerialCommunication.h"
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include "ScreenManagement.h"
 
 void handleSerial2() {

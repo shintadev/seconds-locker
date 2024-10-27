@@ -1,4 +1,4 @@
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include "ScreenManagement.h"
 #include "ButtonHandlers.h"
 #include "KeypadHandler.h"

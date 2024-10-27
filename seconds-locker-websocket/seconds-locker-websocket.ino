@@ -1,27 +1,24 @@
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include "WebSocketHandlers.h"
 #include "LockerOperations.h"
 #include "SerialCommunication.h"
 #include "RFIDHandler.h"
-#include "TokenManager.h"
-// #include <ArduinoJson.h>
 #include <Adafruit_PWMServoDriver.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <MFRC522.h>
 #include <SPI.h>
-#include <WebSocketsClient.h>
+#include <SocketIoClient.h>
 #include <Wire.h>
 
 // Locker setup
-String token = "";
 bool initalWebSocketAttempt = true;
 
 // WiFi credentials & setup
 WiFiMulti WiFiMulti;
 
 // WebSocket setup
-WebSocketsClient webSocket;
+SocketIoClient webSocket;
 
 // PCA9685 setup
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
@@ -46,11 +43,6 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
   Serial.println("\nStarting...");
-
-  // Uncomment the following line to clear the EEPROM (run once, then comment it out again)
-  // clearEEPROM();
-
-  loadToken();
 
   // Initialize SPI bus
   SPI.begin();
@@ -78,15 +70,11 @@ void setup() {
   // Initialize buzzer
   pinMode(BUZZ_PIN, OUTPUT);
 
-  // Initialize WiFi
-  WiFiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
-
-  // Initialize WebSocket connection
-  webSocket.begin(WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
+  // Setup WebSocket
+  setupWebSocket();
 
   connectionState = CONNECTING_WIFI;
+  writeSerial2("NOT_READY");
   delay(1000);
   // Ring a new melody to announce setup completion
   digitalWrite(BUZZ_PIN, HIGH);
@@ -103,8 +91,8 @@ void setup() {
 void loop() {
   uint32_t currentMillis = millis();
 
-  if (connectionState != AUTHENTICATED && currentMillis - lastSerial2Write >= 5000) {
-    if (connectionState == CONNECTING_WEBSOCKET || connectionState == AUTHENTICATING) {
+  if (connectionState != CONNECTED && currentMillis - lastSerial2Write >= 5000) {
+    if (connectionState == CONNECTING_WEBSOCKET || connectionState == CONNECTING_WIFI) {
       // Add a delay before sending NOT_READY during connection attempts
       if (currentMillis - lastWebSocketAttempt > 10000) {
         writeSerial2("NOT_READY");
@@ -120,7 +108,6 @@ void loop() {
     case DISCONNECTED:
     case CONNECTING_WIFI:
       {
-        Serial.println("State: DISCONNECTED or CONNECTING_WIFI");
         Serial.println("Attempting to connect to WiFi...");
         WiFi.disconnect(true);  // Disconnect from any previous connection
         WiFi.mode(WIFI_STA);    // Set WiFi mode to station
@@ -148,12 +135,10 @@ void loop() {
       break;
 
     case CONNECTING_WEBSOCKET:
-      Serial.println("State: CONNECTING_WEBSOCKET");
       if (initalWebSocketAttempt || currentMillis - lastWebSocketAttempt > 5000) {
         initalWebSocketAttempt = false;
         lastWebSocketAttempt = currentMillis;
-        Serial.printf("Attempting to connect to WebSocket server: %s:%d%s\n", WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
-        webSocket.begin(WEBSOCKET_SERVER, WEBSOCKET_PORT, WEBSOCKET_URL);
+        connectWebsocket();
       }
 
       // Add connection timeout check
@@ -165,37 +150,13 @@ void loop() {
 
     case CONNECTED:
       {
-        Serial.println("State: CONNECTED");
-        if (token.length() > 0) {
-          authenticate();
-        } else {
-          registerLocker();
-        }
-      }
-      break;
-
-    case AUTHENTICATING:
-      {
-        Serial.println("State: AUTHENTICATING");
-        // Wait for authentication result
-      }
-      break;
-
-    case AUTHENTICATED:
-      {
-        // Serial.println("State: AUTHENTICATED");
-        // Send heartbeat to server once each 10 seconds
-        // if (currentMillis - lastHeartbeat > 10000) {
-        //   lastHeartbeat = currentMillis;
-        //   sendHeartbeat();
-        // }
 
         if (currentMillis - lastSerial2Read >= 500) {
           lastSerial2Read = currentMillis;
-          handleSerial2();
+          // handleSerial2();
         }
 
-        if (currentMillis - lastSerial2Write >= 5000) {
+        if (currentMillis - lastSerial2Write >= 6000) {
           writeSerial2("READY");
           lastSerial2Write = currentMillis;
         }

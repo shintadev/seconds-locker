@@ -1,5 +1,5 @@
 #include "DisplaySetup.h"
-#include "../Locker_Setup.h"
+#include "../config.h"
 #include "Free_Fonts.h"
 #include <SPIFFS.h>
 
